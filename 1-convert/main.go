@@ -3,21 +3,27 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
+
+var exchangeRates = map[string]float64{
+	"USD": 1.0,   // 1 USD = 1 USD (базовая валюта)
+	"EUR": 0.85,  // 1 USD = 0.85 EUR
+	"RUB": 73.50, // 1 USD = 73.50 RUB
+}
 
 func main() {
 	fmt.Println("__Калькулятор валют__")
 
-	// Получение всей информации от пользователя
-	fromCurrency, err := getCurrencyInput("Введите исходную валюту  (USD, EUR, RUB): ")
+	fromCurrency, err := getCurrencyInput("Введите исходную валюту (USD, EUR, RUB): ")
 	if err != nil {
 		fmt.Println("Ошибка ввода валюты:", err)
 		return
 	}
 
-	amount, err := getAmountInput("Введите сумму: ")
+	amount, err := getAmountInput("Введите сумму:")
 	if err != nil {
-		fmt.Println("Ошибка ввода суммы", err)
+		fmt.Println("Ошибка ввода суммы:", err)
 		return
 	}
 
@@ -27,16 +33,25 @@ func main() {
 		return
 	}
 
-	// Конвертация валюты
-	result := convertCurrency(amount, fromCurrency, toCurrency)
+	//Проверка одинаковых валют: чтобы избежать ненужных вычислений и сразу вернуть исходную сумму
+	if fromCurrency == toCurrency {
+		fmt.Printf("%.2f %s = %.2f %s (валюты одинаковы)\n", amount, fromCurrency, amount, toCurrency)
+		return
+	}
 
-	// Вывод результатов конвертации
+	result, err := convertCurrency(amount, fromCurrency, toCurrency)
+	if err != nil {
+		fmt.Println("Ошибка конвертации:", err)
+		return
+	}
+
 	fmt.Printf("%.2f %s = %.2f %s\n", amount, fromCurrency, result, toCurrency)
 }
 
-// Функция для получения ввода валюты от пользователя
+// getCurrencyInput запрашивает валюту и проверяет её допустимость
 func getCurrencyInput(prompt string) (string, error) {
 	var currency string
+
 	for {
 		fmt.Print(prompt)
 		_, err := fmt.Scan(&currency)
@@ -44,66 +59,52 @@ func getCurrencyInput(prompt string) (string, error) {
 			return "", errors.New("ошибка чтения ввода")
 		}
 
-		// Проверка всех возможных вариантов написания USD
-		switch currency {
-		case "USD", "usd":
-			return "USD", nil
-		case "EUR", "eur":
-			return "EUR", nil
-		case "RUB", "rub":
-			return "RUB", nil
-		default:
-			fmt.Println("Недопустимая валюта, используйте USD, EUR или RUB")
+		currency = strings.ToUpper(currency)
+
+		if _, exists := exchangeRates[currency]; exists {
+			return currency, nil
 		}
+		fmt.Println("Недопустимая валюта, используйте USD, EUR или RUB")
 	}
 }
 
-// Функция для получения суммы от пользователя
+// getAmountInput запрашивает сумму и проверяет её корректность
 func getAmountInput(prompt string) (float64, error) {
 	var amount float64
 
 	for {
 		fmt.Print(prompt)
-		_, err := fmt.Scan(&amount)
 
+		_, err := fmt.Scan(&amount)
 		if err != nil {
-			fmt.Println("Ошибка ввода, попробуйте снова.")
+			fmt.Println("Ошибка ввода, попробуйте снова")
 			continue
 		}
 
 		if amount < 0 {
-			fmt.Println("Сумма не может быть отрицательной, поробуйте снова")
+			fmt.Println("Сумма не может быть отрицательной, попробуйте снова")
 			continue
 		}
+
 		return amount, nil
 	}
 }
 
-// Функция для конвертации валют
-func convertCurrency(amount float64, fromCurrency string, toCurrency string) float64 {
-	const usdToEur = 0.85
-	const usdToRub = 80.33
+func convertCurrency(amount float64, fromCurrency string, toCurrency string) (float64, error) {
 
-	var inUSD float64
+	fromRate, fromExists := exchangeRates[fromCurrency]
 
-	// Конвертируем исходную валюту в USD используя tagged switch
-	switch fromCurrency {
-	case "USD":
-		inUSD = amount
-	case "EUR":
-		inUSD = amount / usdToEur
-	case "RUB":
-		inUSD = amount / usdToRub
+	if !fromExists {
+		return 0, fmt.Errorf("исходная валюта %s не поддерживается", fromCurrency)
 	}
 
-	// Конвертируем из USD в целевую валюту используя tagged switch
-	switch toCurrency {
-	case "USD":
-		return inUSD
-	case "EUR":
-		return inUSD * usdToEur
-	case "RUB":
-		return inUSD * usdToRub
+	toRate, toExists := exchangeRates[toCurrency]
+	// Если целевая валюта не найдена, возвращаем ошибку
+	if !toExists {
+		return 0, fmt.Errorf("целевая валюта %s не поддерживается", toCurrency)
 	}
-	return 0
+
+	result := (amount / fromRate) * toRate
+
+	return result, nil
 }
